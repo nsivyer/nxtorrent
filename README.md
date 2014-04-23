@@ -20,5 +20,5 @@ For the life of me, I could not find a torrent client which could watch a folder
 
 #Usage
 
- nxtorrent.py -d <directory> -p <port> [-x]
+ nxtorrent.py -d directory -p port [-x]
 
