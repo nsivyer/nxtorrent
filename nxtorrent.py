@@ -9,18 +9,21 @@ class ntorrent:
 	ses=None
 	tick_interval=1
 	torrents={}
+	torrent_time_stamps={}
 	processed_torrents={}
 	execute=False
+	upload_limit=0
+	download_limit=0
 	state_str = ['queued', 'checking', 'downloading metadata', \
 		'downloading', 'finished', 'seeding', 'allocating', 'checking fastresume']
 
 	def parse_args(self):
-		help_text = "ntorrent.py -d <directory> -p <port> [-x]"
+		help_text = "ntorrent.py -d <directory> -p <port> [-u <upload limit>] [-r <download limit>] [-x]"
 		if len(sys.argv[1:]) < 1:
 			print help_text
 			sys.exit(1)
 		try:
-			opts, args = getopt.getopt(sys.argv[1:],"d:p:x", ["help"])
+			opts, args = getopt.getopt(sys.argv[1:],"d:p:xr:u:", ["help"])
 		except getopt.GetoptError:
 			print help_text
 			sys.exit(2)
@@ -38,15 +41,23 @@ class ntorrent:
 				self.port = int(arg)
 			elif opt in ("-x"):
 				self.execute = True
+			elif opt in ("-u"):
+				self.upload_limit = int(arg)
+			elif opt in ("-r"):
+				self.download_limit = int(arg)
 			else:
 				print help_text
 				exit(2)
 
 	def create_session(self):
 		self.ses = lt.session()
+		if self.download_limit > 0:
+			self.ses.set_download_rate_limit( self.download_limit  * 1000 )
+		if self.upload_limit > 0:
+				self.ses.set_upload_rate_limit( self.upload_limit  * 1000 )
 		self.ses.listen_on(self.port,self.port+10)
 		#self.ses.start_dht()
-
+   	
    	def print_line(self,line):
    		print(line+"\n")
    		sys.stdout.flush()
@@ -58,13 +69,15 @@ class ntorrent:
 		if filename in self.processed_torrents.keys():
 			del self.processed_torrents[filename]
 
-
 	def start_torrent(self,filename):
 		self.print_line("Adding " + filename)
 		e = lt.bdecode(open(filename, 'rb').read())
 		info = lt.torrent_info(e)
 		h = self.ses.add_torrent(info, "./")
 		self.torrents[filename] = h
+		#store timestamp of torrent 
+		t = os.path.getmtime(filename)
+		self.torrent_time_stamps[filename] = t
 
 	def finish_torrent(self,torrent):
 		self.print_line("Finished " + torrent)
@@ -83,10 +96,7 @@ class ntorrent:
 				else:
 					os.system("/bin/sh -x "+self.directory + "/" + file_path)
 					self.print_line("Done")
-
-		#run file
-		#delete file?
-		#remove from list
+				
 
 	def print_stats(self):
 		for x in self.torrents.keys():
@@ -108,6 +118,11 @@ class ntorrent:
 					self.start_torrent(f)
 		for t in self.torrents:
 			if not os.path.isfile(t):
+				self.remove_torrent(t)
+				return
+		#if any file changes
+		for t in self.torrents:
+			if os.path.getmtime(t) != self.torrent_time_stamps[t]:
 				self.remove_torrent(t)
 				return
 
